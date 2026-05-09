@@ -1,0 +1,72 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    function isAdmin() {
+      return exists(/databases/$(database)/documents/admins/$(request.auth.uid));
+    }
+
+    function isReseller() {
+      return exists(/databases/$(database)/documents/reseller/$(request.auth.uid));
+    }
+
+    function isPremiumUser() {
+      return get(/databases/$(database)/documents/users/$(request.auth.uid)).data.role == 'premium';
+    }
+
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    match /admins/{adminId} {
+      allow read: if isAuthenticated() && (request.auth.uid == adminId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /users/{userId} {
+      allow read: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isReseller());
+      allow create: if isAdmin() || isReseller();
+      allow update: if isAuthenticated() && (request.auth.uid == userId || isAdmin() || isReseller());
+      allow delete: if isAdmin();
+    }
+
+    match /reseller/{resellerId} {
+      allow read: if isAuthenticated() && (request.auth.uid == resellerId || isAdmin());
+      allow write: if isAdmin();
+    }
+
+    match /panels/{panelId} {
+      allow read: if (
+        isAdmin() ||
+        isReseller() ||
+        (isAuthenticated() && resource.data.ownerId == request.auth.uid)
+      );
+      allow create: if true;
+      allow update: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+      allow delete: if isAdmin() || (isAuthenticated() && resource.data.ownerId == request.auth.uid);
+    }
+
+    match /settings/{docId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    match /notifications/{notifId} {
+      allow read: if isAuthenticated();
+      allow create: if isAdmin();
+      allow update: if isAuthenticated() && (resource.data.targetRole == 'all' || isAdmin());
+      allow delete: if isAuthenticated() && (isAdmin() || resource.data.targetRole == 'all');
+    }
+
+    match /activity/{activityId} {
+      allow read: if isAdmin() || isReseller();
+      allow create: if true;
+      allow update, delete: if isAdmin();
+    }
+
+    match /analytics/{docId} {
+      allow read: if isAdmin() || isReseller();
+      allow write: if isAdmin();
+    }
+  }
+}
